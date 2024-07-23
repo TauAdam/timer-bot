@@ -23,6 +23,11 @@ func setTimer(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duratio
 	}
 
 	time.Sleep(seconds)
+
+	if err := db.DeleteTimer(update.Message.From.UserName); err != nil {
+		log.Panic(err)
+	}
+
 	msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Timer finished!")
 	if _, err := bot.Send(msg); err != nil {
 		log.Panic(err)
