@@ -16,10 +16,12 @@ func NewInMemoryDB() *InMemoryDB {
 }
 
 func (db *InMemoryDB) AddTimer(id string, t timer.Timer) error {
+	if id == "" {
+		return fmt.Errorf("id cannot be empty")
+	}
 	db.timers[id] = t
 	return nil
 }
-
 func (db *InMemoryDB) GetTimer(id string) (timer.Timer, error) {
 	t, exists := db.timers[id]
 	if !exists {
