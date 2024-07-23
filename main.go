@@ -47,8 +47,8 @@ func main() {
 			switch update.Message.Command() {
 			case "timer":
 				args := update.Message.CommandArguments()
-				if len(args) != 1 {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /timer <seconds>")
+				if len(args) == 0 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /timer <seconds> or /timer <option>")
 					msg.ReplyToMessageID = update.Message.MessageID
 					if _, err := bot.Send(msg); err != nil {
 						log.Panic(err)
@@ -56,17 +56,32 @@ func main() {
 					continue
 				}
 
-				seconds, err := time.ParseDuration(args + "s")
-				if err != nil {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
-					msg.ReplyToMessageID = update.Message.MessageID
-					if _, err := bot.Send(msg); err != nil {
-						log.Panic(err)
+				switch args {
+				case "10":
+					seconds := 10 * time.Second
+					go setTimer(bot, update, seconds)
+				case "30":
+					seconds := 30 * time.Second
+					go setTimer(bot, update, seconds)
+				case "60":
+					seconds := 60 * time.Second
+					go setTimer(bot, update, seconds)
+				case "90":
+					seconds := 90 * time.Second
+					go setTimer(bot, update, seconds)
+				default:
+					seconds, err := time.ParseDuration(args + "s")
+					if err != nil {
+						msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
+						msg.ReplyToMessageID = update.Message.MessageID
+						if _, err := bot.Send(msg); err != nil {
+							log.Panic(err)
+						}
+						continue
 					}
-					continue
-				}
 
-				go setTimer(bot, update, seconds)
+					go setTimer(bot, update, seconds)
+				}
 			}
 		} else {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
