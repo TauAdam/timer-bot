@@ -2,9 +2,24 @@ package main
 
 import (
 	"log"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+func setTimer(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duration) {
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Timer set for "+seconds.String()+" seconds")
+	msg.ReplyToMessageID = update.Message.MessageID
+	if _, err := bot.Send(msg); err != nil {
+		log.Panic(err)
+	}
+
+	time.Sleep(seconds)
+	msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Timer finished!")
+	if _, err := bot.Send(msg); err != nil {
+		log.Panic(err)
+	}
+}
 
 func main() {
 	bot, err := tgbotapi.NewBotAPI("some-token")
@@ -28,11 +43,37 @@ func main() {
 
 		log.Printf("[%s] %s", update.Message.From.UserName, update.Message.Text)
 
-		msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
-		msg.ReplyToMessageID = update.Message.MessageID
+		if update.Message.IsCommand() {
+			switch update.Message.Command() {
+			case "timer":
+				args := update.Message.CommandArguments()
+				if len(args) != 1 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /timer <seconds>")
+					msg.ReplyToMessageID = update.Message.MessageID
+					if _, err := bot.Send(msg); err != nil {
+						log.Panic(err)
+					}
+					continue
+				}
 
-		if _, err := bot.Send(msg); err != nil {
-			log.Panic(err)
+				seconds, err := time.ParseDuration(args + "s")
+				if err != nil {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
+					msg.ReplyToMessageID = update.Message.MessageID
+					if _, err := bot.Send(msg); err != nil {
+						log.Panic(err)
+					}
+					continue
+				}
+
+				go setTimer(bot, update, seconds)
+			}
+		} else {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+			msg.ReplyToMessageID = update.Message.MessageID
+			if _, err := bot.Send(msg); err != nil {
+				log.Panic(err)
+			}
 		}
 	}
 }
