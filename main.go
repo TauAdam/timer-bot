@@ -1,16 +1,24 @@
 package main
 
 import (
+	"github.com/TauAdam/timer-bot/internal/inmemdb"
+	"github.com/TauAdam/timer-bot/internal/storage"
+	"github.com/TauAdam/timer-bot/internal/timer"
 	"log"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func setTimer(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duration) {
+func setTimer(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duration, db storage.Storage) {
 	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Timer set for "+seconds.String()+" seconds")
 	msg.ReplyToMessageID = update.Message.MessageID
 	if _, err := bot.Send(msg); err != nil {
+		log.Panic(err)
+	}
+
+	t := timer.Timer{Duration: seconds, StartTime: time.Now()}
+	if err := db.AddTimer(update.Message.From.UserName, t); err != nil {
 		log.Panic(err)
 	}
 
@@ -30,6 +38,8 @@ func main() {
 	bot.Debug = true
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
+
+	db := inmemdb.NewInMemoryDB()
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -56,21 +66,12 @@ func main() {
 					continue
 				}
 
+				var seconds time.Duration
 				switch args {
-				case "10":
-					seconds := 10 * time.Second
-					go setTimer(bot, update, seconds)
-				case "30":
-					seconds := 30 * time.Second
-					go setTimer(bot, update, seconds)
-				case "60":
-					seconds := 60 * time.Second
-					go setTimer(bot, update, seconds)
-				case "90":
-					seconds := 90 * time.Second
-					go setTimer(bot, update, seconds)
+				case "10", "30", "60", "90":
+					seconds, _ = time.ParseDuration(args + "s")
 				default:
-					seconds, err := time.ParseDuration(args + "s")
+					seconds, err = time.ParseDuration(args + "s")
 					if err != nil {
 						msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
 						msg.ReplyToMessageID = update.Message.MessageID
@@ -79,9 +80,9 @@ func main() {
 						}
 						continue
 					}
-
-					go setTimer(bot, update, seconds)
 				}
+
+				go setTimer(bot, update, seconds, db)
 			}
 		} else {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
