@@ -30,7 +30,7 @@ func (db *InMemoryDB) GetTimer(id string) (timer.Timer, error) {
 	return t, nil
 }
 
-func (db *InMemoryDB) DeleteTimer(id string) error {
+func (db *InMemoryDB) ResetTimer(id string) error {
 	_, exists := db.timers[id]
 	if !exists {
 		return fmt.Errorf("timer not found")

@@ -70,8 +70,8 @@ func TestInMemoryDB_DeleteTimer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := db.DeleteTimer(tt.id); (err != nil) != tt.wantErr && err.Error() != tt.errMessage {
-				t.Errorf("DeleteTimer() error = %v, wantErr %v", err, tt.wantErr)
+			if err := db.ResetTimer(tt.id); (err != nil) != tt.wantErr && err.Error() != tt.errMessage {
+				t.Errorf("ResetTimer() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

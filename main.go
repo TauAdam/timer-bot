@@ -4,40 +4,60 @@ import (
 	"github.com/TauAdam/timer-bot/internal/inmemdb"
 	"github.com/TauAdam/timer-bot/internal/storage"
 	"github.com/TauAdam/timer-bot/internal/timer"
+	"github.com/joho/godotenv"
 	"log"
+	"os"
+	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func setTimer(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duration, db storage.Storage) {
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Timer set for "+seconds.String()+" seconds")
+func sendInitialTimerSetMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duration, label string) {
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Timer "+label+" set for "+seconds.String()+" seconds")
 	msg.ReplyToMessageID = update.Message.MessageID
 	if _, err := bot.Send(msg); err != nil {
-		log.Panic(err)
-	}
-
-	t := timer.Timer{Duration: seconds, StartTime: time.Now()}
-	if err := db.AddTimer(update.Message.From.UserName, t); err != nil {
-		log.Panic(err)
-	}
-
-	time.Sleep(seconds)
-
-	if err := db.DeleteTimer(update.Message.From.UserName); err != nil {
-		log.Panic(err)
-	}
-
-	msg = tgbotapi.NewMessage(update.Message.Chat.ID, "Timer finished!")
-	if _, err := bot.Send(msg); err != nil {
-		log.Panic(err)
+		log.Fatalf("Error sending message: %v", err)
 	}
 }
 
+func addTimerToDB(db storage.Storage, userName string, t timer.Timer) {
+	if err := db.AddTimer(userName, t); err != nil {
+		log.Fatalf("Error adding timer: %v", err)
+	}
+}
+
+func resetTimerInDB(db storage.Storage, userName string) {
+	if err := db.ResetTimer(userName); err != nil {
+		log.Fatalf("Error resetting timer: %v", err)
+	}
+}
+
+func sendTimerFinishedMessage(bot *tgbotapi.BotAPI, update tgbotapi.Update, label string) {
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Timer "+label+" finished!")
+	if _, err := bot.Send(msg); err != nil {
+		log.Fatalf("Error sending message: %v", err)
+	}
+}
+
+func setTimer(bot *tgbotapi.BotAPI, update tgbotapi.Update, seconds time.Duration, label string, db storage.Storage) {
+	sendInitialTimerSetMessage(bot, update, seconds, label)
+	t := timer.Timer{Duration: seconds, StartTime: time.Now(), Label: label}
+	addTimerToDB(db, update.Message.From.UserName, t)
+	time.Sleep(seconds)
+	resetTimerInDB(db, update.Message.From.UserName)
+	sendTimerFinishedMessage(bot, update, label)
+}
+
 func main() {
-	bot, err := tgbotapi.NewBotAPI("some-token")
+	err := godotenv.Load()
 	if err != nil {
-		log.Panic(err)
+		log.Fatal("Error loading .env file")
+	}
+
+	bot, err := tgbotapi.NewBotAPI(os.Getenv("BOT_TOKEN"))
+	if err != nil {
+		log.Fatalf("Bot token error: %v", err)
 	}
 
 	bot.Debug = true
@@ -62,38 +82,34 @@ func main() {
 			switch update.Message.Command() {
 			case "timer":
 				args := update.Message.CommandArguments()
-				if len(args) == 0 {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /timer <seconds> or /timer <option>")
+				argsParts := strings.SplitN(args, " ", 2)
+				if len(argsParts) < 2 {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /timer <seconds> <label>")
 					msg.ReplyToMessageID = update.Message.MessageID
 					if _, err := bot.Send(msg); err != nil {
-						log.Panic(err)
+						log.Fatalf("Error sending message: %v", err)
 					}
 					continue
 				}
 
-				var seconds time.Duration
-				switch args {
-				case "10", "30", "60", "90":
-					seconds, _ = time.ParseDuration(args + "s")
-				default:
-					seconds, err = time.ParseDuration(args + "s")
-					if err != nil {
-						msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
-						msg.ReplyToMessageID = update.Message.MessageID
-						if _, err := bot.Send(msg); err != nil {
-							log.Panic(err)
-						}
-						continue
+				seconds, err := time.ParseDuration(argsParts[0] + "s")
+				if err != nil {
+					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
+					msg.ReplyToMessageID = update.Message.MessageID
+					if _, err := bot.Send(msg); err != nil {
+						log.Fatalf("Error sending message: %v", err)
 					}
+					continue
 				}
 
-				go setTimer(bot, update, seconds, db)
+				label := argsParts[1]
+				go setTimer(bot, update, seconds, label, db)
 			}
 		} else {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
 			msg.ReplyToMessageID = update.Message.MessageID
 			if _, err := bot.Send(msg); err != nil {
-				log.Panic(err)
+				log.Fatalf("Error sending message: %v", err)
 			}
 		}
 	}
