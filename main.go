@@ -7,7 +7,6 @@ import (
 	"github.com/joho/godotenv"
 	"log"
 	"os"
-	"strings"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -81,29 +80,27 @@ func main() {
 		if update.Message.IsCommand() {
 			switch update.Message.Command() {
 			case "timer":
-				args := update.Message.CommandArguments()
-				argsParts := strings.SplitN(args, " ", 2)
-				if len(argsParts) < 2 {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Usage: /timer <seconds> <label>")
-					msg.ReplyToMessageID = update.Message.MessageID
-					if _, err := bot.Send(msg); err != nil {
-						log.Fatalf("Error sending message: %v", err)
-					}
-					continue
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Choose a timer duration:")
+				msg.ReplyMarkup = createTimerOptionsKeyboard()
+				if _, err := bot.Send(msg); err != nil {
+					log.Fatalf("Error sending message: %v", err)
 				}
-
-				seconds, err := time.ParseDuration(argsParts[0] + "s")
-				if err != nil {
-					msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Invalid duration")
-					msg.ReplyToMessageID = update.Message.MessageID
-					if _, err := bot.Send(msg); err != nil {
-						log.Fatalf("Error sending message: %v", err)
+				if update.CallbackQuery != nil {
+					callbackData := update.CallbackQuery.Data
+					seconds, err := time.ParseDuration(callbackData)
+					if err != nil {
+						log.Fatalf("Invalid duration: %v", err)
 					}
-					continue
+					label := "Predefined timer"
+					callbackUpdate := tgbotapi.Update{
+						Message: update.CallbackQuery.Message,
+					}
+					go setTimer(bot, callbackUpdate, seconds, label, db)
+					callbackConfig := tgbotapi.NewCallback(update.CallbackQuery.ID, "")
+					if _, err := bot.Request(callbackConfig); err != nil {
+						log.Fatalf("Error acknowledging callback query: %v", err)
+					}
 				}
-
-				label := argsParts[1]
-				go setTimer(bot, update, seconds, label, db)
 			}
 		} else {
 			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
@@ -113,4 +110,20 @@ func main() {
 			}
 		}
 	}
+}
+
+func createTimerOptionsKeyboard() tgbotapi.InlineKeyboardMarkup {
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("1 minute", "1m"),
+			tgbotapi.NewInlineKeyboardButtonData("5 minutes", "5m"),
+			tgbotapi.NewInlineKeyboardButtonData("10 minutes", "10m"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("15 minutes", "15m"),
+			tgbotapi.NewInlineKeyboardButtonData("30 minutes", "30m"),
+			tgbotapi.NewInlineKeyboardButtonData("60 minutes", "60m"),
+		),
+	)
+	return keyboard
 }
